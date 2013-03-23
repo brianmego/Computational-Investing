@@ -37,7 +37,6 @@ def allAllocations():
 
 
 def main():
-    allAllocations()
     symbols = ['GOOG', 'DIS', 'MSFT', 'AAPL']
     start_date = dt.datetime(2011, 1, 1)
     end_date = dt.datetime(2011, 12, 31)
