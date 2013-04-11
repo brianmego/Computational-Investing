@@ -7,7 +7,7 @@ import QSTK.qstkutil.DataAccess as da
 
 
 def main(cash, orders, output_path):
-    order_array = create_order_array()
+    order_array = create_order_array(orders)
 
     symbols = ['GOOG', 'IBM', 'XOM', 'AAPL', '$SPX']
     start_date = dt.datetime(2011, 1, 14)
@@ -20,7 +20,7 @@ def main(cash, orders, output_path):
     file_data = c_dataobj.get_data(open_market_days, symbols, file_columns)
     stock_data = dict(zip(file_columns, file_data))
     closing_prices = stock_data['close'].values
-    na_closing_prices = (closing_prices / closing_prices[0, :])
+    na_closing_prices = (closing_prices / closing_prices[0,:])
 
     cash = int(cash)
     portfolioHoldings = {'GOOG': 0, 'IBM': 0, 'XOM': 0, 'AAPL': 0, '$SPX': 0, 'cash': cash}
@@ -52,7 +52,8 @@ def main(cash, orders, output_path):
 
         for symbol in symbols:
             symbol_index = symbols.index(symbol)
-            portfolioValues[close_index][symbol_index] = closing_prices[close_index][symbol_index] * (float(portfolioHoldings[symbol]))
+            portfolioValues[close_index][symbol_index] = closing_prices[
+                close_index][symbol_index] * (float(portfolioHoldings[symbol]))
 
         portfolioValues[close_index][5] = cash
 
@@ -92,8 +93,14 @@ def main(cash, orders, output_path):
     print 'Average Daily Return of $SPX : ' + str(benchmark_average_daily_returns)
 
 
-def create_order_array():
+def create_order_array(orders_file):
     order_array = []
+    dtype = [('year', int), ('month', int), ('day', int), ('symbol', 'S10'), ('order', 'S10'), ('shares', int)]
+    na_data = np.loadtxt(orders_file, delimiter=',', dtype=dtype)
+    # na_dates = na_data[:1]
+    # na_orders = np.str(na_data[:, 3:6])
+    na_data = np.sort(na_data, order=['year', 'month', 'day'])
+    raw_input(na_data)
     with open(orders, 'r') as f:
         contents = f.read()
         allOrders = contents.splitlines()
