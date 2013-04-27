@@ -42,7 +42,7 @@ def find_events(ls_symbols, d_data):
             f_symprice_today = df_actual_close[s_sym].ix[ldt_timestamps[i]]
             f_symprice_yest = df_actual_close[s_sym].ix[ldt_timestamps[i - 1]]
             with open('orders.csv', 'a') as f:
-                if f_symprice_today < 6.0 and f_symprice_yest >= 6.0:
+                if f_symprice_today < 5.0 and f_symprice_yest >= 5.0:
                     d = ldt_timestamps[i]
                     try:
                         d2 = ldt_timestamps[i+5]
