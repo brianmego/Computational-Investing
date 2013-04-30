@@ -50,10 +50,35 @@ def find_events(ls_symbols, d_data):
                         d2 = ldt_timestamps[-1]
                     f.write(str(d.year) + ',' + str(d.month) + ',' + str(d.day) + ',' + str(s_sym) + ',BUY,100\n')
                     f.write(str(d2.year) + ',' + str(d2.month) + ',' + str(d2.day) + ',' + str(s_sym) + ',SELL,100\n')
-                    df_events[s_sym].ix[ldt_timestamps[i]] = 1
+                    df_events[s_sym].ix[d] = 1
 
     return df_events
 
+
+def find_bollinger_events(ls_symbols, d_data):
+    print "Finding Events"
+    df_events = copy.deepcopy(d_data)
+    df_events = df_events * np.NAN
+
+    ldt_timestamps = df_events.index
+    for s_sym in ls_symbols:
+        for i in range(1, len(ldt_timestamps)):
+            spy_today = d_data['SPY'].ix[ldt_timestamps[i]]
+            f_boll_today = d_data[s_sym].ix[ldt_timestamps[i]]
+            f_boll_yest = d_data[s_sym].ix[ldt_timestamps[i - 1]]
+            with open('orders.csv', 'a') as f:
+                if (f_boll_today <= -2.0 and
+                    f_boll_yest >= -2.0 and
+                        spy_today >= 1.2):
+                    d = ldt_timestamps[i]
+                    try:
+                            d2 = ldt_timestamps[i+5]
+                    except IndexError:
+                        d2 = ldt_timestamps[-1]
+                    f.write(str(d.year) + ',' + str(d.month) + ',' + str(d.day) + ',' + str(s_sym) + ',BUY,100\n')
+                    f.write(str(d2.year) + ',' + str(d2.month) + ',' + str(d2.day) + ',' + str(s_sym) + ',SELL,100\n')
+                    df_events[s_sym].ix[d] = 1
+    return df_events
 
 if __name__ == '__main__':
     dt_start = dt.datetime(2008, 1, 1)

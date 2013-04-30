@@ -5,37 +5,54 @@ import QSTK.qstkutil.qsdateutil as du
 import QSTK.qstkutil.tsutil as tsu
 import QSTK.qstkutil.DataAccess as da
 import pandas as pd
+import QSTK.qstkstudy.EventProfiler as ep
+import eventstudies as es
 
 
 class MarketSim(object):
 
-    def __init__(self, orders_file, output_path, cash=1000000, **kwds):
+    def __init__(self, output_path, start_date=None, end_date=None,
+                 symbols=None,
+                 orders_file=None, cash=1000000, **kwds):
         self.cash = cash
         self.output_path = output_path
-        self.orders = self.create_order_array(orders_file)
-        self.symbols = np.unique(self.orders['symbol'])
-        f = self.orders[0]
-        l = self.orders[-1]
-        self.start_date = dt.datetime(f['year'], f['month'], f['day'])
-        self.end_date = dt.datetime(l['year'], l['month'], l['day'])
+        self.orders = None
+        self.symbols = symbols
+        self.start_date = start_date
+        self.end_date = end_date
+        if orders_file:
+            self.set_from_file(orders_file)
+
         self.open_market_days = du.getNYSEdays(
             self.start_date,
             self.end_date + dt.timedelta(days=1),
             dt.timedelta(hours=16))
-        self.na_closing_prices = self.get_closing_prices(
-            self.start_date, self.end_date, self.symbols)
-        self.daily_values = self.get_daily_values()
+        self.d_data = self.get_data(self.start_date, self.end_date, self.symbols)
+        self.na_closing_prices = self.d_data['close'].values
         self.bollinger_bands = self.get_bollinger_bands()
 
-    def generate_daily_values_file(self, report=False):
+        if orders_file:
+            self.daily_values = self.get_daily_values()
+            # import pdb;pdb.set_trace()
+
+    def set_from_file(self, orders_file):
+        self.orders = self.create_order_array(orders_file)
+        self.symbols = np.unique(self.orders['symbol'])
+
+        f = self.orders[0]
+        l = self.orders[-1]
+        self.start_date = dt.datetime(f['year'], f['month'], f['day'])
+        self.end_date = dt.datetime(l['year'], l['month'], l['day'])
+
+    def generate_daily_values_file(self):
         np.savetxt(output_path, self.daily_values, fmt='%i', delimiter=',')
 
-    def get_bollinger_bands(self):
-        rolling_mean = pd.rolling_mean(self.na_closing_prices, 20)
-        rolling_std = pd.rolling_std(self.na_closing_prices, 20)
+    def get_bollinger_bands(self, lookback=20):
+        rolling_mean = pd.rolling_mean(self.na_closing_prices, lookback)
+        rolling_std = pd.rolling_std(self.na_closing_prices, lookback)
         bollinger_bands = (self.na_closing_prices - rolling_mean) / rolling_std
         df_bollinger = pd.DataFrame(bollinger_bands, index=self.open_market_days,
-                           columns=self.symbols)
+                                    columns=self.symbols)
         return df_bollinger
 
     def get_daily_values(self):
@@ -52,13 +69,12 @@ class MarketSim(object):
         portfolioValues = np.zeros((len(open_market_days), len(symbols)))
         for day in open_market_days:
             close_index = open_market_days.index(day)
-
             for order in self.orders:
                 date = dt.datetime(order['year'], order['month'], order['day'])
-                symbol = order['symbol']
-                orderType = order['orderType']
-                shares = order['shares']
                 if day.date() == date.date():
+                    symbol = order['symbol']
+                    orderType = order['orderType']
+                    shares = order['shares']
                     symbol_index = np.where(symbols == symbol)
                     stock_price = na_closing_prices[close_index][symbol_index]
                     if symbol not in portfolioHoldings:
@@ -72,14 +88,14 @@ class MarketSim(object):
                         cash += (stock_price * shares)
                     else:
                         raise Exception('Bad Order Type')
-
+            # pdb.set_trace()
             for symbol in symbols:
                 symbol_index = np.where(symbols == symbol)
                 portfolioValues[close_index][symbol_index] = (
                     na_closing_prices[close_index][symbol_index] *
                     (float(portfolioHoldings[symbol])))
-
-            dailyValue = np.sum(portfolioValues[close_index]) + cash
+            # pdb.set_trace()
+            dailyValue = np.sum(np.nan_to_num(portfolioValues[close_index])) + cash
             na_daily_values[close_index] = [day.year, day.month,
                                             day.day, dailyValue]
 
@@ -102,15 +118,14 @@ class MarketSim(object):
         # plt.savefig('My Portfolio.pdf', format='pdf')
         # print 'Saved PDF to "My Portfolio.pdf"'
 
-    def get_closing_prices(self, start_date, end_date, symbols):
+    def get_data(self, start_date, end_date, symbols):
         hours = dt.timedelta(hours=16)
         open_market_days = du.getNYSEdays(start_date, end_date + dt.timedelta(days=1), hours)
         c_dataobj = da.DataAccess('Yahoo', cachestalltime=0)
         file_columns = ['open', 'high', 'low', 'close', 'volume', 'actual_close']
         file_data = c_dataobj.get_data(open_market_days, symbols, file_columns)
-        stock_data = dict(zip(file_columns, file_data))
-        closing_prices = stock_data['close'].values
-        return closing_prices
+        d_data = dict(zip(file_columns, file_data))
+        return d_data
 
     def create_order_array(self, orders_file):
         dtype = [('year', int), ('month', int), ('day', int),
@@ -132,7 +147,7 @@ class MarketSim(object):
         sharpe_ratio = (average_daily_returns / standard_deviation *
                         np.sqrt(252))
 
-        na_bench_prices = self.get_closing_prices(start_date, end_date, ['$SPX'])
+        na_bench_prices = self.get_data(start_date, end_date, ['$SPX'])['close'].values
         benchmarkPortfolio = na_bench_prices[:, 0]
         na_benchmark_daily_returns = benchmarkPortfolio.copy()
         tsu.returnize0(na_benchmark_daily_returns)
@@ -179,7 +194,23 @@ if __name__ == '__main__':
     orders_file = args.orders_file
     output_path = args.values_file
     cash = int(args.cash)
+
+    # Start Bollinger Event Study
+    dataobj = da.DataAccess('Yahoo')
+    ls_symbols = dataobj.get_symbols_from_list('sp5002012')
+    ls_symbols.append('SPY')
+    sim = MarketSim('output.csv',
+                    start_date=dt.datetime(2008, 1, 1),
+                    end_date=dt.datetime(2009, 12, 31),
+                    symbols=ls_symbols)
+    boll_data = sim.get_bollinger_bands()
+    df_events = es.find_bollinger_events(ls_symbols, boll_data)
+    ep.eventprofiler(df_events, sim.d_data, i_lookback=20, i_lookforward=20,
+                     s_filename='2012Bollinger.pdf', b_market_neutral=True,
+                     b_errorbars=True, s_market_sym='SPY')
+    # End Bollinger Event Study
+
+    # Start Backtest
     sim = MarketSim(orders_file=orders_file, output_path=output_path, cash=cash)
     sim.generate_daily_values_file()
-    # sim.report_output()
-    # print sim.get_bollinger_bands().to_string()
+    sim.report_output()
